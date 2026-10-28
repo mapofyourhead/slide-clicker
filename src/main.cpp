@@ -1,7 +1,10 @@
 #include <Arduino.h>
-#include "BluetoothKeyboard.h"
+// Needed by the USB library's mass-storage sources in this framework version.
+#include <FS.h>
+#include <USB.h>
+#include <USBHIDKeyboard.h>
 
-BluetoothKeyboard keyboard;
+USBHIDKeyboard keyboard;
 
 constexpr unsigned long debounceMs = 30;
 constexpr unsigned long longPressMs = 700;
@@ -28,12 +31,14 @@ Button buttons[] = {
 };
 
 void startSlideshow() {
-  keyboard.write(KEY_F5, CTRL_MODIFIER);
+  keyboard.press(KEY_LEFT_CTRL);
+  keyboard.press(KEY_F5);
+  delay(20);
+  keyboard.releaseAll();
 }
 
 void shortPress(const Button &button) {
   firstSlidePending = false;
-  if (!keyboard.isConnected()) return;
   if (button.key == KEY_F5) {
     startSlideshow();
   } else {
@@ -44,7 +49,6 @@ void shortPress(const Button &button) {
 
 void longPress(const Button &button) {
   firstSlidePending = false;
-  if (!keyboard.isConnected()) return;
   if (button.key == KEY_LEFT_ARROW) {
     startSlideshow();
     // Allow Slides to open before sending Home; no browser feedback is available.
@@ -52,7 +56,7 @@ void longPress(const Button &button) {
     firstSlidePending = true;
     Serial.println("Start slideshow on first slide");
   } else if (button.key == KEY_F5) {
-    keyboard.write(KEY_B);
+    keyboard.write('b');
     Serial.println("Toggle black screen");
   } else {
     // Activates a focused link/control or selected video, not an arbitrary item.
@@ -70,21 +74,11 @@ void setup() {
     button.stableState = button.lastReading;
   }
   keyboard.begin();
-  Serial.println("Pair with Slide Clicker in your computer's Bluetooth settings.");
+  USB.begin();
 }
 
 void loop() {
   const unsigned long now = millis();
-  static bool wasConnected = false;
-  const bool connected = keyboard.isConnected();
-  if (connected != wasConnected) {
-    Serial.println(connected ? "Bluetooth connected" : "Bluetooth disconnected");
-    wasConnected = connected;
-    firstSlidePending = false;
-    // Do not carry an unfinished press across a connection change.
-    for (auto &button : buttons) button.trackingPress = false;
-  }
-  if (!connected) firstSlidePending = false;
   if (firstSlidePending && now - slideshowStartedMs >= slideshowLoadMs) {
     keyboard.write(KEY_HOME);
     firstSlidePending = false;
