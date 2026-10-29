@@ -18,7 +18,11 @@ constexpr uint8_t CTRL_MODIFIER = 0x01;
 class BluetoothKeyboard {
  public:
   void begin() {
-    BLEDevice::init("Slide Clicker");
+    Serial.println("Starting Bluetooth...");
+    if (!BLEDevice::init("Slide Clicker")) {
+      Serial.println("ERROR: Bluetooth initialization failed");
+      return;
+    }
     BLESecurity::setCapability(ESP_IO_CAP_NONE);
     BLESecurity::setAuthenticationMode(true, false, true);
     BLESecurity::setInitEncryptionKey();
@@ -28,7 +32,8 @@ class BluetoothKeyboard {
     server = BLEDevice::createServer();
     server->advertiseOnDisconnect(true);
     auto *hid = new BLEHIDDevice(server);
-    hid->manufacturer("DIY Slide Clicker");
+    // manufacturer() creates the optional characteristic before we set its value.
+    hid->manufacturer()->setValue("DIY Slide Clicker");
     hid->hidInfo(0, 1);
 
     // Standard keyboard report: modifiers, reserved byte, six key slots.
@@ -50,15 +55,28 @@ class BluetoothKeyboard {
     hid->startServices();
 
     auto *advertising = BLEDevice::getAdvertising();
-    advertising->setAppearance(HID_KEYBOARD);
-    advertising->addServiceUUID(hid->hidService()->getUUID());
-    advertising->setScanResponse(true);
-    advertising->start();
+    // Put all discovery information in one packet (26 bytes, limit is 31).
+    // This avoids depending on a second scan-response packet for the name.
+    BLEAdvertisementData discovery;
+    discovery.setFlags(0x06);  // General discoverable, Bluetooth LE only.
+    discovery.setName("Slide Clicker");
+    discovery.setAppearance(HID_KEYBOARD);
+    discovery.setCompleteServices(BLEUUID(uint16_t(0x1812)));
+    advertising->setScanResponse(false);
+    if (!advertising->setAdvertisementData(discovery)) {
+      Serial.println("ERROR: Could not configure Bluetooth advertising");
+      return;
+    }
+    advertisingStarted = advertising->start();
+    Serial.println(advertisingStarted ? "Bluetooth advertising requested: Slide Clicker"
+                                      : "ERROR: Bluetooth advertising failed to start");
   }
 
   bool isConnected() const {
     return server && server->getConnectedCount() > 0;
   }
+
+  bool isReady() const { return advertisingStarted; }
 
   void write(uint8_t key, uint8_t modifiers = 0) {
     if (!isConnected()) return;  // Never queue actions while disconnected.
@@ -77,4 +95,5 @@ class BluetoothKeyboard {
   };
   BLEServer *server = nullptr;
   BLECharacteristic *input = nullptr;
+  bool advertisingStarted = false;
 };

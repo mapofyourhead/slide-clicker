@@ -70,13 +70,22 @@ void setup() {
     button.stableState = button.lastReading;
   }
   keyboard.begin();
-  Serial.println("Pair with Slide Clicker in your computer's Bluetooth settings.");
+  if (keyboard.isReady()) {
+    Serial.println("Pair with Slide Clicker in your computer's Bluetooth settings.");
+  }
 }
 
 void loop() {
   const unsigned long now = millis();
   static bool wasConnected = false;
   const bool connected = keyboard.isConnected();
+  static unsigned long lastStatusMs = 0;
+  if (now - lastStatusMs >= 5000) {
+    lastStatusMs = now;
+    Serial.println(connected ? "Bluetooth connected" :
+        (keyboard.isReady() ? "Bluetooth started; waiting for a connection to Slide Clicker"
+                           : "ERROR: Bluetooth startup failed; reset and check startup messages"));
+  }
   if (connected != wasConnected) {
     Serial.println(connected ? "Bluetooth connected" : "Bluetooth disconnected");
     wasConnected = connected;
