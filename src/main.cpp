@@ -5,9 +5,6 @@ BluetoothKeyboard keyboard;
 
 constexpr unsigned long debounceMs = 30;
 constexpr unsigned long longPressMs = 700;
-constexpr unsigned long slideshowLoadMs = 1500;
-bool firstSlidePending = false;
-unsigned long slideshowStartedMs = 0;
 
 struct Button {
   uint8_t pin;
@@ -32,7 +29,6 @@ void startSlideshow() {
 }
 
 void shortPress(const Button &button) {
-  firstSlidePending = false;
   if (!keyboard.isConnected()) return;
   if (button.key == KEY_F5) {
     startSlideshow();
@@ -43,14 +39,10 @@ void shortPress(const Button &button) {
 }
 
 void longPress(const Button &button) {
-  firstSlidePending = false;
   if (!keyboard.isConnected()) return;
   if (button.key == KEY_LEFT_ARROW) {
-    startSlideshow();
-    // Allow Slides to open before sending Home; no browser feedback is available.
-    slideshowStartedMs = millis();
-    firstSlidePending = true;
-    Serial.println("Start slideshow on first slide");
+    keyboard.write(KEY_HOME);
+    Serial.println("First slide");
   } else if (button.key == KEY_F5) {
     keyboard.write(KEY_B);
     Serial.println("Toggle black screen");
@@ -89,14 +81,8 @@ void loop() {
   if (connected != wasConnected) {
     Serial.println(connected ? "Bluetooth connected" : "Bluetooth disconnected");
     wasConnected = connected;
-    firstSlidePending = false;
     // Do not carry an unfinished press across a connection change.
     for (auto &button : buttons) button.trackingPress = false;
-  }
-  if (!connected) firstSlidePending = false;
-  if (firstSlidePending && now - slideshowStartedMs >= slideshowLoadMs) {
-    keyboard.write(KEY_HOME);
-    firstSlidePending = false;
   }
   for (auto &button : buttons) {
     const int reading = digitalRead(button.pin);
